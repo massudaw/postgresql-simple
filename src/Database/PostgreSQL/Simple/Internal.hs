@@ -323,10 +323,14 @@ exec conn sql =
           Just res -> return res
 #else
 exec conn sql =
+
     withConnection conn $ \h -> do
-        success <- PQ.sendQuery h sql
+        success <-PQ.sendQuery h sql
         if success
-        then awaitResult h Nothing
+        then awaitResult h Nothing `catch` ((\e ->  do
+          PQ.getCancel h >>= traverse PQ.cancel
+          awaitResult h Nothing
+          throwLibPQError h ("PQasync " ++ show (e :: AsyncException) ++ " interruption of query") )
         else throwLibPQError h "PQsendQuery failed"
   where
     awaitResult h mres = do
